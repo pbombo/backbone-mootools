@@ -31,8 +31,9 @@
   var _ = root._;
   if (!_ && (typeof require !== 'undefined')) _ = require('underscore')._;
 
-  // For Backbone's purposes, jQuery, Zepto, or Ender owns the `$` variable.
-  var $ = root.jQuery || root.Zepto || root.ender;
+  // For Backbone's purposes, MooTools owns the `$' variable
+  var $ = this.$;
+  var $$ = this.$$;
 
   // Runs Backbone.js in *noConflict* mode, returning the `Backbone` variable
   // to its previous owner. Returns a reference to this Backbone object.
@@ -785,17 +786,16 @@
       var oldIE             = (isExplorer.exec(navigator.userAgent.toLowerCase()) && (!docMode || docMode <= 7));
       if (oldIE) {
         this.iframe = $('<iframe src="javascript:0" tabindex="-1" />').hide().appendTo('body')[0].contentWindow;
+        this.iframe = $('<iframe src="javascript:0" tabindex="-1" />').setStyle('display','none').inject(body).contentWindow;
         this.navigate(fragment);
       }
 
       // Depending on whether we're using pushState or hashes, and whether
       // 'onhashchange' is supported, determine how we check the URL state.
       if (this._hasPushState) {
-        $(window).bind('popstate', this.checkUrl);
-      } else if ('onhashchange' in window && !oldIE) {
-        $(window).bind('hashchange', this.checkUrl);
-      } else {
-        setInterval(this.checkUrl, this.interval);
+        window.store('hashchange:interval',this.interval);
+	      window.addEvent('hashchange', this.checkUrl);
+//      return this.loadUrl();
       }
 
       // Determine if we need to change the base url, for a pushState link
@@ -889,7 +889,7 @@
   // This should be prefered to global lookups, if you're dealing with
   // a specific view.
   var selectorDelegate = function(selector) {
-    return $(selector, this.el);
+    return this.el.getElements(selector);
   };
 
   // Cached regex to split keys for `delegate`.
@@ -921,7 +921,7 @@
     // Remove this view from the DOM. Note that the view isn't present in the
     // DOM by default, so calling this method may be a no-op.
     remove : function() {
-      $(this.el).remove();
+      this.el.dispose();
       return this;
     },
 
@@ -931,9 +931,8 @@
     //     var el = this.make('li', {'class': 'row'}, this.model.escape('title'));
     //
     make : function(tagName, attributes, content) {
-      var el = document.createElement(tagName);
-      if (attributes) $(el).attr(attributes);
-      if (content) $(el).html(content);
+      var el = new Element(tagName, attributes);
+      if (content) el.set('html', content);
       return el;
     },
 
@@ -954,6 +953,7 @@
     delegateEvents : function(events) {
       if (!(events || (events = this.events))) return;
       if (_.isFunction(events)) events = events.call(this);
+      var newEvents = {};
       this.undelegateEvents();
       for (var key in events) {
         var method = this[events[key]];
@@ -962,17 +962,18 @@
         var eventName = match[1], selector = match[2];
         method = _.bind(method, this);
         eventName += '.delegateEvents' + this.cid;
-        if (selector === '') {
-          $(this.el).bind(eventName, method);
-        } else {
-          $(this.el).delegate(selector, eventName, method);
+        if (selector !== '') {
+          eventName+= ':relay(' + selector + ')';
         }
+        this.el.addEvent(eventName, method);
+        newEvents[eventName] = method;
       }
     },
 
     // Clears all callbacks previously bound to the view with `delegateEvents`.
     undelegateEvents: function() {
-      $(this.el).unbind('.delegateEvents' + this.cid);
+	  this.el.removeEvent('delegateEvents');	
+      //$(this.el).unbind('.delegateEvents' + this.cid);
     },
 
     // Performs the initial configuration of a View with a set of options.
@@ -1085,7 +1086,7 @@
     }
 
     // Make the request.
-    return $.ajax(params);
+    new Request(params).send();
   };
 
   // Helpers
